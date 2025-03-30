@@ -40,3 +40,10 @@ ros2 run raspi_car keyboard_controller_node.py
 - 激光雷达连接到USB端口，映射为/dev/rplidar
 - MPU6050通过I2C连接到树莓派
 - 电机驱动通过GPIO针脚连接
+cd ~/raspi_car_ws && colcon build --packages-select raspi_car
+source ~/raspi_car_ws/install/setup.bash
+cd ~/raspi_car_ws/src/raspi_car/launch && chmod +x odom_fusion.launch.py car_complete.launch.py
+
+source ~/raspi_car_ws/install/setup.bash && ros2 launch raspi_car car_base.launch.py
+source ~/raspi_car_ws/install/setup.bash && ros2 launch raspi_car lidar.launch.py
+source ~/raspi_car_ws/install/setup.bash && ~/raspi_car_ws/install/raspi_car/share/raspi_car/scripts/start_rviz.sh 

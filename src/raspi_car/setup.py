@@ -50,6 +50,11 @@ setup(
             'urdf_publisher_node = scripts.urdf_publisher_node:main',
             'fix_tf_chain = scripts.fix_tf_chain:main',
             'mpu6050_subscriber = scripts.mpu6050_subscriber:main',
+            # 里程计和传感器融合节点
+            'encoder_odom_node = scripts.encoder_odom_node:main',
+            'imu_odom_fusion = scripts.imu_odom_fusion:main',
+            # 关节状态发布节点
+            'joint_state_publisher_node = scripts.joint_state_publisher_node:main',
         ],
     },
 ) 
