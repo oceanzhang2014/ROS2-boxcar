@@ -1,0 +1,145 @@
+<?xml version="1.0"?>
+<robot name="raspi_car">
+  <!-- 颜色定义 -->
+  <material name="black">
+    <color rgba="0.0 0.0 0.0 1.0"/>
+  </material>
+  <material name="blue">
+    <color rgba="0.0 0.0 0.8 1.0"/>
+  </material>
+  <material name="green">
+    <color rgba="0.0 0.8 0.0 1.0"/>
+  </material>
+  <material name="red">
+    <color rgba="0.8 0.0 0.0 1.0"/>
+  </material>
+
+  <!-- 底盘链接 -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.2 0.15 0.05"/>
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.2 0.15 0.05"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 左前轮链接 -->
+  <link name="front_left_wheel">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 右前轮链接 -->
+  <link name="front_right_wheel">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 左后轮链接 -->
+  <link name="rear_left_wheel">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 右后轮链接 -->
+  <link name="rear_right_wheel">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="0.02" radius="0.03"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 激光雷达链接 -->
+  <link name="laser">
+    <visual>
+      <geometry>
+        <cylinder length="0.02" radius="0.025"/>
+      </geometry>
+      <material name="red"/>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder length="0.02" radius="0.025"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 底盘与左前轮关节 -->
+  <joint name="base_to_front_left_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="front_left_wheel"/>
+    <origin xyz="0.08 0.08 -0.025" rpy="-1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- 底盘与右前轮关节 -->
+  <joint name="base_to_front_right_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="front_right_wheel"/>
+    <origin xyz="0.08 -0.08 -0.025" rpy="-1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- 底盘与左后轮关节 -->
+  <joint name="base_to_rear_left_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_left_wheel"/>
+    <origin xyz="-0.08 0.08 -0.025" rpy="-1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- 底盘与右后轮关节 -->
+  <joint name="base_to_rear_right_wheel" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_right_wheel"/>
+    <origin xyz="-0.08 -0.08 -0.025" rpy="-1.5707 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- 激光雷达固定关节（注意：通常这应该是静态TF处理的） -->
+  <joint name="base_to_laser" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser"/>
+    <origin xyz="0 0 0.1" rpy="0 0 0"/>
+  </joint>
+</robot> 
