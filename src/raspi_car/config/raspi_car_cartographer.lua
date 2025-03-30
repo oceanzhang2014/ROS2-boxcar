@@ -19,7 +19,7 @@ options = {
   map_builder = MAP_BUILDER,
   trajectory_builder = TRAJECTORY_BUILDER,
   map_frame = "map",
-  tracking_frame = "base_link", -- 跟踪帧：IMU帧（如果有）或基础连接帧
+  tracking_frame = "imu_link", -- 使用IMU作为跟踪帧以提高精度
   published_frame = "odom",     -- 发布帧：使用里程计
   odom_frame = "odom",
   provide_odom_frame = false,   -- 我们已经有自己的里程计
@@ -45,7 +45,7 @@ options = {
   rangefinder_sampling_ratio = 1.0,
   odometry_sampling_ratio = 1.0,
   fixed_frame_pose_sampling_ratio = 1.0,
-  imu_sampling_ratio = 1.0,
+  imu_sampling_ratio = 1.0,     -- 保持使用全部IMU数据
   landmarks_sampling_ratio = 1.0,
 }
 
@@ -56,9 +56,12 @@ MAP_BUILDER.use_trajectory_builder_2d = true
 TRAJECTORY_BUILDER_2D.min_range = 0.15 -- 激光雷达最小范围（米）
 TRAJECTORY_BUILDER_2D.max_range = 12.0 -- 激光雷达最大范围（米）
 TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.0 -- 当激光点超出范围时的填充距离
-TRAJECTORY_BUILDER_2D.use_imu_data = false -- 不使用IMU数据（RPLidar没有IMU）
+TRAJECTORY_BUILDER_2D.use_imu_data = true -- 启用IMU数据进行姿态和方向校正
 TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 2e2
 TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 4e2
+
+-- 增加IMU权重，在转弯时提高准确性
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.5) -- 降低角度阈值以捕获更多转弯
 
 -- 为树莓派优化的参数
 TRAJECTORY_BUILDER_2D.submaps.num_range_data = 35 -- 增加每个子地图中的扫描数量，提高精度
@@ -87,10 +90,13 @@ TRAJECTORY_BUILDER_2D.submaps.range_data_inserter = {
   }
 }
 
+-- 优化IMU参数以处理小车的快速转弯和抖动
+TRAJECTORY_BUILDER_2D.imu_gravity_time_constant = 10.0  -- 增加重力时间常数以平滑IMU数据
+
 -- 对于树莓派有限资源，降低计算复杂度
 POSE_GRAPH.optimize_every_n_nodes = 20 -- 降低优化周期，提高实时性
-POSE_GRAPH.constraint_builder.min_score = 0.65 -- 最小约束分数
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.7 -- 全局定位最小分数
+POSE_GRAPH.constraint_builder.min_score = 0.6 -- 稍微降低最小约束分数，增加回环检测机会
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.65 -- 全局定位最小分数
 
 -- 其他性能优化
 POSE_GRAPH.constraint_builder.sampling_ratio = 0.3 -- 降低约束采样率，加快处理速度
@@ -108,9 +114,6 @@ POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.angular_search_windo
 -- 改进实时性能设置
 TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.max_length = 0.5 -- 体素过滤器最大长度
 TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.min_num_points = 150 -- 减少最小点数
-
--- 关闭全局SLAM以大幅提高性能（如果只需要实时建图）
---POSE_GRAPH.optimize_every_n_nodes = 0 -- 设为0表示禁用全局SLAM优化
 
 -- 明确设置栅格类型 - 这是必需的，防止错误
 TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.grid_type = "PROBABILITY_GRID"

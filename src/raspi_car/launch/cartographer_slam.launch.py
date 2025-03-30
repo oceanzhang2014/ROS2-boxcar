@@ -63,7 +63,11 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
         arguments=['-configuration_directory', cartographer_config_dir,
                    '-configuration_basename', 'raspi_car_cartographer.lua'],
-        remappings=[('scan', '/scan')]
+        remappings=[
+            ('scan', '/scan'),
+            ('imu', '/imu/data'),   # 使用融合后的IMU数据
+            ('odom', '/odom')       # 使用里程计数据
+        ]
     )
     
     # 创建Cartographer占用栅格地图发布节点

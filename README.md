@@ -72,9 +72,24 @@ ros2 run raspi_car keyboard_controller_node.py
 ./src/raspi_car/scripts/save_map.sh my_map_name
 ```
 
+### 建图优化说明
+
+如果在建图过程中遇到以下问题：
+- 小车转弯但地图上显示不正确
+- 直行时地图出现漂移
+- 回到原点时位置不匹配
+
+可以尝试以下优化方法：
+1. 确保IMU（MPU6050）安装牢固，减少振动
+2. 小车在转弯时速度放慢，让传感器有足够时间捕获环境变化
+3. 在转弯后直行一段距离，帮助算法识别特征点
+4. 避免在相似度高的环境中建图（如长走廊、对称房间）
+
+当前配置已优化以使用IMU数据提高转弯精度。
+
 ## 硬件连接
 
-- 激光雷达连接到USB端口，映射为/dev/rplidar
+- 激光雷达连接到USB端口，映射为/dev/ttyUSB0
 - MPU6050通过I2C连接到树莓派
 - 电机驱动通过GPIO针脚连接
 
@@ -104,4 +119,8 @@ source ~/raspi_car_ws/install/setup.bash && ros2 launch raspi_car slam_mapping.l
 
 # 启动SLAM建图 (使用cartographer)
 source ~/raspi_car_ws/install/setup.bash && ros2 launch raspi_car cartographer_slam.launch.py
+
+# 启动Cartographer地图可视化
+source ~/raspi_car_ws/install/setup.bash && ./src/raspi_car/scripts/rviz_cartographer.sh
 ``` 
+
