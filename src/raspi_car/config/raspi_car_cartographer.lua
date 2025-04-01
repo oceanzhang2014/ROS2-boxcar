@@ -19,103 +19,89 @@ options = {
   map_builder = MAP_BUILDER,
   trajectory_builder = TRAJECTORY_BUILDER,
   map_frame = "map",
-  tracking_frame = "imu_link", -- 使用IMU作为跟踪帧以提高精度
-  published_frame = "odom",     -- 发布帧：使用里程计
+  tracking_frame = "laser_stable",  -- 使用稳定激光雷达坐标系作为跟踪坐标系，确保数据点方向稳定
+  published_frame = "base_link",  -- 使用base_link，避免与odom_frame冲突
   odom_frame = "odom",
-  provide_odom_frame = false,   -- 我们已经有自己的里程计
-  publish_frame_projected_to_2d = true,
-  
-  -- 增加时间缓冲，解决树莓派处理延迟问题
-  use_pose_extrapolator = true,
-  use_odometry = true,          -- 使用里程计数据
-  use_nav_sat = false,          -- 不使用GPS
-  use_landmarks = false,        -- 不使用地标
-  num_laser_scans = 1,         -- 使用激光扫描
+  provide_odom_frame = true,  -- 让Cartographer提供map->odom变换
+  publish_frame_projected_to_2d = true,  -- 保证在2D平面上的投影
+  use_pose_extrapolator = true,  -- 使用位姿外推器
+  use_odometry = true,  -- 启用IMU里程计作为初始位姿估计
+  use_nav_sat = false,
+  use_landmarks = false,
+  num_laser_scans = 1,
   num_multi_echo_laser_scans = 0,
   num_subdivisions_per_laser_scan = 1,
   num_point_clouds = 0,
-  
-  -- 增加超时时间，适应树莓派处理能力
-  lookup_transform_timeout_sec = 0.5,
-  submap_publish_period_sec = 0.3,       -- 降低子地图发布频率，节约资源
-  pose_publish_period_sec = 5e-3,
-  trajectory_publish_period_sec = 30e-3,
-  
-  -- 数据采样率 - 保持全部激光数据以提高建图质量
+  lookup_transform_timeout_sec = 0.2,  -- 超时时间
+  submap_publish_period_sec = 3.0,  -- 增加子地图发布周期，减少更新频率
+  pose_publish_period_sec = 50e-3,  -- 增加位姿发布周期，减少TF树更新频率
+  trajectory_publish_period_sec = 100e-3,  -- 增加轨迹发布周期，减少更新频率
   rangefinder_sampling_ratio = 1.0,
   odometry_sampling_ratio = 1.0,
   fixed_frame_pose_sampling_ratio = 1.0,
-  imu_sampling_ratio = 1.0,     -- 保持使用全部IMU数据
+  imu_sampling_ratio = 1.0,  -- 使用全部IMU数据
   landmarks_sampling_ratio = 1.0,
+  publish_to_tf = true,  -- 必须发布到TF
+  publish_tracked_pose = true,  -- 发布跟踪的位姿
 }
 
--- 使用2D轨迹构建器
+-- 调整2D轨迹构建器参数
+TRAJECTORY_BUILDER_2D.use_imu_data = false  -- 在使用laser_stable作为tracking_frame时，我们禁用IMU数据
+TRAJECTORY_BUILDER_2D.min_range = 0.2  -- 最小测量距离
+TRAJECTORY_BUILDER_2D.max_range = 8.0  -- 最大测量距离，确保能捕捉更远的特征
+TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.0
+TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true  -- 启用在线相关扫描匹配
+
+-- 设置Ceres扫描匹配器参数 - 调整为更合理的值
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 2.0  -- 恢复到更合理的平移权重
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 40.0  -- 降低到更合理的旋转权重
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.occupied_space_weight = 40.0  -- 设置为更合理的占用空间权重
+
+-- 运动过滤器参数 - 调整为更少频繁的更新
+TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 10.0  -- 增加到10秒，极大减少静止状态下的更新频率
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.3  -- 增加距离阈值，减少小幅移动触发的更新
+TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(8.0)  -- 增加角度阈值，减少小角度旋转触发的更新
+
+-- Pose图优化参数
+POSE_GRAPH.optimize_every_n_nodes = 100  -- 设置更合理的优化频率
+POSE_GRAPH.constraint_builder.min_score = 0.65  -- 调整到更合理的阈值
+POSE_GRAPH.constraint_builder.global_localization_min_score = 0.65  -- 与上方保持一致
+
+-- 增强角度优化
+POSE_GRAPH.matcher_translation_weight = 1.0  -- 更合理的平移权重
+POSE_GRAPH.matcher_rotation_weight = 10.0  -- 更合理的旋转权重
+
+-- 位置图的优化选项 - 使用更合理的值
+POSE_GRAPH.optimization_problem.huber_scale = 1e2  -- 降低到更合理的值
+POSE_GRAPH.optimization_problem.acceleration_weight = 1e1  -- 设置为更合理的加速度权重
+POSE_GRAPH.optimization_problem.rotation_weight = 1e5  -- 降低到更合理的旋转权重
+POSE_GRAPH.constraint_builder.loop_closure_rotation_weight = 1e5  -- 调整到更合理的值
+POSE_GRAPH.constraint_builder.max_constraint_distance = 15.0  -- 设置为更合理的约束距离
+
+-- 回环检测参数 - 使用更合理的值
+POSE_GRAPH.constraint_builder.sampling_ratio = 0.2  -- 设置为更合理的采样率
+POSE_GRAPH.constraint_builder.loop_closure_translation_weight = 1.0
+POSE_GRAPH.constraint_builder.loop_closure_rotation_weight = 1e5  -- 设置为更合理的值
+POSE_GRAPH.constraint_builder.log_matches = true  -- 记录匹配情况，方便调试
+
+-- 子图构建参数
 MAP_BUILDER.use_trajectory_builder_2d = true
-
--- 2D SLAM优化参数
-TRAJECTORY_BUILDER_2D.min_range = 0.15 -- 激光雷达最小范围（米）
-TRAJECTORY_BUILDER_2D.max_range = 12.0 -- 激光雷达最大范围（米）
-TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.0 -- 当激光点超出范围时的填充距离
-TRAJECTORY_BUILDER_2D.use_imu_data = true -- 启用IMU数据进行姿态和方向校正
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.translation_weight = 2e2
-TRAJECTORY_BUILDER_2D.ceres_scan_matcher.rotation_weight = 4e2
-
--- 增加IMU权重，在转弯时提高准确性
-TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.5) -- 降低角度阈值以捕获更多转弯
-
--- 为树莓派优化的参数
-TRAJECTORY_BUILDER_2D.submaps.num_range_data = 35 -- 增加每个子地图中的扫描数量，提高精度
-TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.resolution = 0.05 -- 栅格地图分辨率（米/像素）
-
--- 正确的range_data_inserter配置
-TRAJECTORY_BUILDER_2D.submaps.range_data_inserter = {
-  range_data_inserter_type = "PROBABILITY_GRID_INSERTER_2D",
-  probability_grid_range_data_inserter = {
-    insert_free_space = true,
-    hit_probability = 0.55,
-    miss_probability = 0.49,
-  },
-  tsdf_range_data_inserter = {
-    truncation_distance = 0.3,
-    maximum_weight = 10.0,
-    update_free_space = false,
-    normal_estimation_options = {
-      num_normal_samples = 4,
-      sample_radius = 0.5,
-    },
-    project_sdf_distance_to_scan_normal = true,
-    update_weight_range_exponent = 0,
-    update_weight_angle_scan_normal_to_ray_kernel_bandwidth = 0.5,
-    update_weight_distance_cell_to_hit_kernel_bandwidth = 0.5,
-  }
-}
-
--- 优化IMU参数以处理小车的快速转弯和抖动
-TRAJECTORY_BUILDER_2D.imu_gravity_time_constant = 10.0  -- 增加重力时间常数以平滑IMU数据
-
--- 对于树莓派有限资源，降低计算复杂度
-POSE_GRAPH.optimize_every_n_nodes = 20 -- 降低优化周期，提高实时性
-POSE_GRAPH.constraint_builder.min_score = 0.6 -- 稍微降低最小约束分数，增加回环检测机会
-POSE_GRAPH.constraint_builder.global_localization_min_score = 0.65 -- 全局定位最小分数
-
--- 其他性能优化
-POSE_GRAPH.constraint_builder.sampling_ratio = 0.3 -- 降低约束采样率，加快处理速度
-POSE_GRAPH.constraint_builder.max_constraint_distance = 15.0 -- 约束搜索距离
-POSE_GRAPH.constraint_builder.loop_closure_translation_weight = 1.1e4
-POSE_GRAPH.constraint_builder.loop_closure_rotation_weight = 1e5
-POSE_GRAPH.matcher_translation_weight = 5e2
-POSE_GRAPH.matcher_rotation_weight = 1.6e3
-
--- 降低优化时的计算负担
-POSE_GRAPH.constraint_builder.ceres_scan_matcher.ceres_solver_options.max_num_iterations = 10
-POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.linear_search_window = 7.0
-POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.angular_search_window = math.rad(30.)
-
--- 改进实时性能设置
-TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.max_length = 0.5 -- 体素过滤器最大长度
-TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.min_num_points = 150 -- 减少最小点数
-
--- 明确设置栅格类型 - 这是必需的，防止错误
+TRAJECTORY_BUILDER_2D.submaps.num_range_data = 120  -- 设置为更合理的值
 TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.grid_type = "PROBABILITY_GRID"
+TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.resolution = 0.05  -- 保持地图分辨率
 
-return options 
+-- 点云过滤参数 - 使用更合理的值
+TRAJECTORY_BUILDER_2D.voxel_filter_size = 0.03  -- 设置为更合理的体素滤波大小
+TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.max_length = 0.5  -- 设置为更合理的值
+TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.min_num_points = 200  -- 设置为更合理的值
+TRAJECTORY_BUILDER_2D.adaptive_voxel_filter.max_range = 6.0  -- 设置为更合理的值
+
+-- 本地SLAM后端
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.ceres_solver_options.use_nonmonotonic_steps = false
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.ceres_solver_options.max_num_iterations = 15  -- 设置为更合理的迭代次数
+TRAJECTORY_BUILDER_2D.ceres_scan_matcher.ceres_solver_options.num_threads = 1  -- 单线程，适合RPi
+
+-- IMU姿态相关参数
+TRAJECTORY_BUILDER_2D.imu_gravity_time_constant = 10.0  -- 设置为更合理的值
+
+return options

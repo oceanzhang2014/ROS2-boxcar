@@ -3,7 +3,7 @@
 
 """
 激光雷达启动文件
-启动RPLidar激光雷达节点
+启动RPLidar激光雷达节点，使用最小化基础配置
 """
 
 import os
@@ -19,19 +19,34 @@ def generate_launch_description():
     # 声明启动参数
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
     serial_port = LaunchConfiguration('serial_port', default='/dev/ttyUSB0')
+    laser_frame = LaunchConfiguration('laser_frame', default='laser')
+    stable_frame = LaunchConfiguration('stable_frame', default='laser_stable')
+    use_stable_frame = LaunchConfiguration('use_stable_frame', default='true')
     
-    # 创建激光雷达节点
+    # 决定使用哪个坐标系作为激光雷达帧
+    # 当use_stable_frame为true时使用稳定帧，否则使用普通激光雷达帧
+    # 使用条件表达式构建最终的frame_id
+    frame_id_param = {
+        'frame_id': stable_frame,  # 默认使用稳定帧确保数据点方向稳定
+    }
+    
+    # 创建激光雷达节点 - 仅使用最基础配置
     rplidar_node = Node(
         package='rplidar_ros',
         executable='rplidar_node',
         name='rplidar_node',
         output='screen',
         parameters=[{
-            'use_sim_time': use_sim_time,
-            'serial_port': serial_port,
             'serial_baudrate': 460800,
-            'frame_id': 'laser',
-            'angle_compensate': True
+            'scan_mode': 'Standard',           # 使用标准扫描模式，提高稳定性
+            'scan_frequency': 7.0,             # 使用更合理的扫描频率
+            'filter_multiple': True,           # 启用多重过滤
+            'ignore_array': '[]', 
+            'max_distance': 5.0,               # 最大有效距离
+            'min_distance': 0.15,              # 使用默认的最小距离
+            'angle_compensate': True,          # 启用角度补偿
+            'inverted': False,                 # 不反转
+            **frame_id_param                   # 使用上面决定的帧ID
         }]
     )
     
@@ -47,6 +62,21 @@ def generate_launch_description():
             'serial_port',
             default_value='/dev/ttyUSB0',
             description='激光雷达串口设备'
+        ),
+        DeclareLaunchArgument(
+            'laser_frame',
+            default_value='laser',
+            description='激光雷达坐标系名称'
+        ),
+        DeclareLaunchArgument(
+            'stable_frame',
+            default_value='laser_stable',
+            description='激光雷达稳定坐标系名称'
+        ),
+        DeclareLaunchArgument(
+            'use_stable_frame',
+            default_value='true',
+            description='是否使用稳定帧作为激光雷达帧'
         ),
         
         # 节点

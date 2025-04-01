@@ -2,15 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-使用Cartographer进行SLAM建图
+使用Cartographer进行SLAM建图，与纯IMU定位节点集成
 """
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess
-from launch.substitutions import LaunchConfiguration, TextSubstitution
-from launch.conditions import IfCondition
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo, TimerAction
+from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -22,39 +21,109 @@ def generate_launch_description():
     
     # 声明启动参数
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
-    publish_odom_tf = LaunchConfiguration('publish_odom_tf', default='true')
-    display_ip = LaunchConfiguration('display_ip', default='192.168.0.4')
-    launch_rviz = LaunchConfiguration('launch_rviz', default='true')
     
     # 设置Cartographer配置文件路径
     cartographer_config_dir = os.path.join(pkg_raspi_car, 'config')
     cartographer_config = os.path.join(cartographer_config_dir, 'raspi_car_cartographer.lua')
     
-    # 设置RViz配置文件路径
-    rviz_config_file = os.path.join(pkg_raspi_car, 'config', 'cartographer.rviz')
+    # 日志信息
+    log_start = LogInfo(msg='启动Cartographer SLAM建图...')
+    log_config = LogInfo(msg='使用配置文件: ' + cartographer_config)
     
-    # 包含基础启动文件
-    car_base_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_raspi_car, 'launch', 'car_base.launch.py')
-        ),
-        launch_arguments={
-            'use_sim_time': use_sim_time,
-            'publish_odom_tf': publish_odom_tf
-        }.items()
-    )
-    
-    # 包含激光雷达启动文件
+    # 包含激光雷达启动文件 - 指定使用稳定激光雷达坐标系
     lidar_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_raspi_car, 'launch', 'lidar.launch.py')
         ),
         launch_arguments={
-            'use_sim_time': use_sim_time
+            'use_sim_time': use_sim_time,
+            'use_stable_frame': 'true',
+            'stable_frame': 'laser_stable'
         }.items()
     )
     
-    # 创建Cartographer节点
+    # 创建MPU6050节点 (只保留一个)
+    mpu6050_node = Node(
+        package='raspi_car',
+        executable='mpu6050_node.py',
+        name='mpu6050',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'frame_id': 'imu_link'},
+            {'bus_num': 1},
+            {'device_addr': 0x68},
+            {'publish_rate': 100.0},  # Hz - 提高采样率以获得更好的效果
+        ]
+    )
+    
+    # 创建基于IMU的里程计节点
+    imu_odometry_node = Node(
+        package='raspi_car',
+        executable='imu_odom_fusion.py',
+        name='imu_based_odometry',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'imu_topic': '/imu/data_raw'},
+            {'base_frame': 'base_link'},
+            {'odom_frame': 'odom'},
+            {'world_frame': 'map'},
+            {'imu_frame': 'imu_link'},
+            {'publish_rate': 30.0},                # 降低到30Hz，减少TF树更新频率
+            {'madgwick_beta': 0.01},               # 显著降低Madgwick滤波器增益，提高稳定性
+            {'gravity_magnitude': 9.81},           # 重力加速度
+            {'imu_acceleration_bias': 0.0},        # IMU加速度偏差
+            {'imu_angular_velocity_bias': 0.0},    # IMU角速度偏差
+            {'use_mag': False},                    # 不使用磁力计
+            {'rotation_stabilizer': 0.995},        # 极大增加旋转稳定系数，提高稳定性
+            {'zero_yaw_period': 10.0},             # 大幅增加零偏航角修正周期，减少频繁调整
+        ]
+    )
+    
+    # TF发布器节点，更新参数以稳定激光雷达方向
+    tf_publisher_node = Node(
+        package='raspi_car',
+        executable='tf_publisher_node.py',
+        name='tf_publisher',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'robot_base_frame': 'base_link'},
+            {'laser_frame': 'laser'},
+            {'imu_frame': 'imu_link'},
+            {'wheel_frames': True},               # 发布轮胎坐标系
+            {'laser_static_orientation': True},   # 确保激光雷达方向保持静态
+            {'laser_stable_frame': 'laser_stable'}, # 指定稳定激光雷达坐标系名称
+        ]
+    )
+    
+    # 添加自定义关节状态发布器
+    joint_state_pub_cmd = Node(
+        package='raspi_car',
+        executable='joint_state_pub.py',
+        name='simple_joint_state_publisher',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'publish_rate': 1.0},  # 极低的发布频率，减少TF树不必要的更新
+            {'use_fixed_positions': True},  # 使用固定位置以确保稳定性
+        ]
+    )
+    
+    # 机器人状态发布器节点
+    robot_state_publisher = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        output='screen',
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'robot_description': open(os.path.join(pkg_raspi_car, 'urdf', 'raspi_car.urdf'), 'r').read()}
+        ]
+    )
+    
+    # 创建Cartographer节点 - 调整参数以解决坐标系跳动问题
     cartographer_node = Node(
         package='cartographer_ros',
         executable='cartographer_node',
@@ -65,8 +134,8 @@ def generate_launch_description():
                    '-configuration_basename', 'raspi_car_cartographer.lua'],
         remappings=[
             ('scan', '/scan'),
-            ('imu', '/imu/data'),   # 使用融合后的IMU数据
-            ('odom', '/odom')       # 使用里程计数据
+            # 不再需要IMU数据，因为我们以激光雷达为主要参考系
+            ('odom', '/odometry/imu_only')  # 仍然使用IMU里程计数据作为初始估计
         ]
     )
     
@@ -76,53 +145,62 @@ def generate_launch_description():
         executable='cartographer_occupancy_grid_node',
         name='cartographer_occupancy_grid_node',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time,
-                     'resolution': 0.05}]
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'resolution': 0.05,           # 地图分辨率 
+            'publish_period_sec': 10.0     # 极大降低发布频率，提供更完整的位置计算后再更新
+        }]
     )
     
-    # 使用直接命令启动RViz
-    display_ip_str = TextSubstitution(text="192.168.0.4")
-    rviz_cmd = ExecuteProcess(
-        cmd=[
-            'bash', '-c',
-            f'export DISPLAY={display_ip_str}:0.0 && export LIBGL_ALWAYS_SOFTWARE=1 && export MESA_GL_VERSION_OVERRIDE=3.3 && export XDG_RUNTIME_DIR=/run/user/$(id -u) && ros2 run rviz2 rviz2 -d {rviz_config_file}'
-        ],
-        output='screen',
-        condition=IfCondition(launch_rviz)
-    )
-    
-    # 返回启动描述
+    # 返回启动描述，确保正确的启动顺序
     return LaunchDescription([
+        # 日志信息
+        log_start,
+        log_config,
+        
         # 启动参数
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='false',
             description='使用仿真时间'
         ),
-        DeclareLaunchArgument(
-            'publish_odom_tf',
-            default_value='true',
-            description='是否在tf_publisher中发布odom->base_link变换'
-        ),
-        DeclareLaunchArgument(
-            'display_ip',
-            default_value='192.168.0.4',
-            description='远程显示IP地址'
-        ),
-        DeclareLaunchArgument(
-            'launch_rviz',
-            default_value='true',
-            description='是否启动RViz'
+        
+        # 按照依赖顺序启动 - 优化启动顺序以确保稳定的TF树构建
+        robot_state_publisher,   # 首先发布机器人模型
+        joint_state_pub_cmd,     # 关节状态发布
+        tf_publisher_node,       # 发布静态TF树
+        
+        # 添加2.0秒延迟，让上述节点有足够时间初始化
+        TimerAction(
+            period=2.0,
+            actions=[
+                mpu6050_node,            # IMU传感器
+            ]
         ),
         
-        # 包含的启动文件
-        car_base_launch,
-        lidar_launch,
+        # 添加3.0秒延迟，让IMU传感器有足够时间初始化
+        TimerAction(
+            period=3.0,
+            actions=[
+                imu_odometry_node,     # IMU里程计
+            ]
+        ),
         
-        # Cartographer节点
-        cartographer_node,
-        cartographer_occupancy_grid_node,
+        # 添加4.0秒延迟，等待IMU里程计初始化完成
+        TimerAction(
+            period=4.0,
+            actions=[
+                lidar_launch,          # 激光雷达
+            ]
+        ),
         
-        # 使用直接命令启动RViz（条件启动）
-        rviz_cmd,
+        # 添加6.0秒延迟，确保传感器正常运行后再启动Cartographer
+        TimerAction(
+            period=6.0,
+            actions=[
+                # Cartographer节点 - 最后启动
+                cartographer_node,
+                cartographer_occupancy_grid_node,
+            ]
+        ),
     ]) 
