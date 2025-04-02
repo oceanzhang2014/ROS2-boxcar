@@ -51,9 +51,10 @@ def generate_launch_description():
         parameters=[
             {'use_sim_time': use_sim_time},
             {'frame_id': 'imu_link'},
-            {'bus_num': 1},
+            {'bus_num': 11},
             {'device_addr': 0x68},
             {'publish_rate': 100.0},  # Hz - 提高采样率以获得更好的效果
+            {'ignore_connection_errors': True},  # 添加此参数，忽略连接错误
         ]
     )
     
@@ -134,8 +135,8 @@ def generate_launch_description():
                    '-configuration_basename', 'raspi_car_cartographer.lua'],
         remappings=[
             ('scan', '/scan'),
-            # 不再需要IMU数据，因为我们以激光雷达为主要参考系
-            ('odom', '/odometry/imu_only')  # 仍然使用IMU里程计数据作为初始估计
+            # 修改：不再需要IMU数据，完全基于激光雷达进行SLAM
+            # ('odom', '/odometry/imu_only')  # 注释掉IMU里程计
         ]
     )
     
@@ -148,7 +149,7 @@ def generate_launch_description():
         parameters=[{
             'use_sim_time': use_sim_time,
             'resolution': 0.05,           # 地图分辨率 
-            'publish_period_sec': 10.0     # 极大降低发布频率，提供更完整的位置计算后再更新
+            'publish_period_sec': 1.0     # 降低发布周期至1秒，使地图更频繁更新
         }]
     )
     

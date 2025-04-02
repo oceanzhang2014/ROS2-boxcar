@@ -232,12 +232,14 @@ class MPU6050Node(Node):
         self.declare_parameter('bus_num', 1)
         self.declare_parameter('device_addr', 0x68)
         self.declare_parameter('publish_rate', 50.0)  # Hz
+        self.declare_parameter('ignore_connection_errors', False)  # 添加忽略连接错误参数
         
         # 获取参数
         self.frame_id = self.get_parameter('frame_id').value
         self.bus_num = self.get_parameter('bus_num').value
         self.device_addr = self.get_parameter('device_addr').value
         self.publish_rate = self.get_parameter('publish_rate').value
+        self.ignore_connection_errors = self.get_parameter('ignore_connection_errors').value
         
         # 创建互斥锁
         self.lock = threading.Lock()
@@ -368,27 +370,78 @@ class MPU6050Node(Node):
         
         return self.roll, self.pitch, self.yaw
 
+    def publish_fake_imu_data(self):
+        """发布模拟IMU数据（全零值）"""
+        msg = Imu()
+        
+        # 设置消息头
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.frame_id
+        
+        # 设置线性加速度（默认为0）
+        msg.linear_acceleration.x = 0.0
+        msg.linear_acceleration.y = 0.0
+        msg.linear_acceleration.z = 9.81  # 只设置Z轴重力加速度
+        
+        # 设置角速度（默认为0）
+        msg.angular_velocity.x = 0.0
+        msg.angular_velocity.y = 0.0
+        msg.angular_velocity.z = 0.0
+        
+        # 设置协方差 - 设置为高不确定性
+        msg.linear_acceleration_covariance = [
+            0.1, 0.0, 0.0,
+            0.0, 0.1, 0.0,
+            0.0, 0.0, 0.1
+        ]
+        
+        msg.angular_velocity_covariance = [
+            0.1, 0.0, 0.0,
+            0.0, 0.1, 0.0,
+            0.0, 0.0, 0.1
+        ]
+        
+        # 发布消息
+        self.imu_publisher.publish(msg)
+        self.get_logger().debug("已发布模拟IMU数据")
+
 def main(args=None):
     """主函数"""
     rclpy.init(args=args)
     
+    node = MPU6050Node()
+    
     try:
-        mpu6050_node = MPU6050Node()
-        
-        # 启动节点
+        # 初始化传感器
         try:
-            rclpy.spin(mpu6050_node)
-        except KeyboardInterrupt:
-            mpu6050_node.get_logger().info('用户中断')
+            node.get_logger().info(f"正在尝试连接MPU6050，总线: {node.bus_num}, 设备地址: 0x{node.device_addr:02x}")
+            node.mpu = MPU6050(address=node.device_addr, bus_num=node.bus_num)
+            node.get_logger().info("MPU6050初始化成功")
+            
+            # 校准传感器
+            node.calibrate_sensor()
+            
+            # 创建定时器，定期发布IMU数据
+            node.timer = node.create_timer(1.0/node.publish_rate, node.publish_imu_data)
+            
+            node.get_logger().info(f"MPU6050节点已启动，发布频率: {node.publish_rate} Hz")
+            
         except Exception as e:
-            mpu6050_node.get_logger().error(f'运行过程中出错: {str(e)}')
-        finally:
-            # 清理资源
-            mpu6050_node.destroy_node()
-    except Exception as e:
-        print(f'初始化过程中出错: {str(e)}')
+            if node.ignore_connection_errors:
+                node.get_logger().warning(f"MPU6050初始化失败: {e}")
+                node.get_logger().warning("已启用忽略连接错误模式，将发布模拟IMU数据")
+                
+                # 发布零值IMU数据
+                node.timer = node.create_timer(1.0/node.publish_rate, node.publish_fake_imu_data)
+            else:
+                node.get_logger().error(f"MPU6050初始化失败: {e}")
+                return
+        
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
-        # 关闭ROS 2客户端
+        node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
