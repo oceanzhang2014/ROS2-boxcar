@@ -30,23 +30,20 @@ def generate_launch_description():
         'frame_id': stable_frame,  # 默认使用稳定帧确保数据点方向稳定
     }
     
-    # 创建激光雷达节点 - 仅使用最基础配置
+    # 创建激光雷达节点 - 使用C1官方启动文件的完整配置
     rplidar_node = Node(
         package='rplidar_ros',
         executable='rplidar_node',
         name='rplidar_node',
         output='screen',
         parameters=[{
+            'channel_type': 'serial',
+            'serial_port': serial_port,
             'serial_baudrate': 460800,
-            'scan_mode': 'Standard',           # 使用标准扫描模式，提高稳定性
-            'scan_frequency': 7.0,             # 使用更合理的扫描频率
-            'filter_multiple': True,           # 启用多重过滤
-            'ignore_array': '[]', 
-            'max_distance': 5.0,               # 最大有效距离
-            'min_distance': 0.15,              # 使用默认的最小距离
-            'angle_compensate': True,          # 启用角度补偿
-            'inverted': False,                 # 不反转
-            **frame_id_param                   # 使用上面决定的帧ID
+            'frame_id': stable_frame,
+            'inverted': False,
+            'angle_compensate': True,
+            'scan_mode': 'Standard'
         }]
     )
     

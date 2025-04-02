@@ -42,53 +42,78 @@ sudo chmod 666 /dev/gpiomem
 
 ```bash
 # 设置X11环境（替换YOUR_WINDOWS_IP为Windows电脑的IP地址）
-~/raspi_car_ws/src/raspi_car/scripts/setup_x11_display.sh YOUR_WINDOWS_IP
+~/ROS2-boxcar/src/raspi_car/scripts/setup_x11_display.sh YOUR_WINDOWS_IP
 ```
 
 ## 运行Cartographer SLAM建图
 
-### 方法0: 分步式测试方法（最佳调试方式）
+### 方法0: 使用集成启动文件（最佳方法）
+
+最新测试的集成启动文件提供了最稳定可靠的方法，解决了所有已知问题:
+
+```bash
+# 编译并准备环境
+cd ~/ROS2-boxcar
+colcon build --symlink-install
+source install/setup.bash
+
+# 启动Cartographer SLAM集成启动文件
+ros2 launch raspi_car cartographer_slam.launch.py
+```
+
+这个启动文件会:
+- 初始化机器人状态发布和关节状态
+- 发布TF变换（使用稳定的激光雷达坐标系）
+- 启动MPU6050 IMU传感器节点
+- 启动IMU与里程计融合节点
+- 启动RPLidar激光雷达节点 
+- 启动Cartographer SLAM节点
+- 启动占用栅格地图发布节点
+
+所有组件以正确的顺序和适当的延迟启动，保证稳定性。
+
+### 方法1: 分步式测试方法（调试用）
 
 这种方法将激光雷达启动和RViz显示分开，便于排查问题：
 
 ```bash
 # 步骤1: 先在一个终端中启动激光雷达和TF
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 launch raspi_car lidar_only.launch.py serial_port:=/dev/rplidar
 
 # 步骤2: 在另一个终端启动远程RViz显示
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-~/raspi_car_ws/src/raspi_car/scripts/start_remote_rviz.sh 192.168.0.4
+~/ROS2-boxcar/src/raspi_car/scripts/start_remote_rviz.sh 192.168.0.4
 ```
 
-### 方法1: 使用简化版启动文件（推荐）
+### 方法2: 使用简化版启动文件
 
-这是最新的简化版启动方法，解决了所有已知问题:
+这是简化版启动方法:
 
 ```bash
 # 终端1: 启动SLAM核心组件
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 launch raspi_car simple_slam.launch.py serial_port:=/dev/rplidar
 
 # 终端2: 在另一个终端启动远程RViz (替换YOUR_WINDOWS_IP为Windows电脑IP地址)
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-~/raspi_car_ws/src/raspi_car/scripts/start_remote_rviz.sh YOUR_WINDOWS_IP
+~/ROS2-boxcar/src/raspi_car/scripts/start_remote_rviz.sh YOUR_WINDOWS_IP
 
 # 终端3: 启动键盘控制
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-cd ~/raspi_car_ws/src/raspi_car/scripts
+cd ~/ROS2-boxcar/src/raspi_car/scripts
 python3 keyboard_controller_node.py
 ```
 
-### 方法2: 使用改进版启动文件
+### 方法3: 使用改进版启动文件
 
 ```bash
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 launch raspi_car improved_slam.launch.py serial_port:=/dev/rplidar windows_ip:=YOUR_WINDOWS_IP
 ```
@@ -100,39 +125,39 @@ ros2 launch raspi_car improved_slam.launch.py serial_port:=/dev/rplidar windows_
 - 启动电机控制节点
 - 在Windows电脑上显示RViz界面
 
-### 方法3: 分步启动各组件
+### 方法4: 分步启动各组件
 
 ```bash
 # 终端1: 启动激光雷达节点
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 launch raspi_car lidar.launch.py serial_port:=/dev/rplidar
 
 # 终端2: 启动Cartographer SLAM
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-ros2 run cartographer_ros cartographer_node -configuration_directory ~/raspi_car_ws/install/raspi_car/share/raspi_car/config -configuration_basename raspi_car_cartographer.lua
+ros2 run cartographer_ros cartographer_node -configuration_directory ~/ROS2-boxcar/install/raspi_car/share/raspi_car/config -configuration_basename raspi_car_cartographer.lua
 
 # 终端3: 启动占用栅格地图生成节点
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 run cartographer_ros cartographer_occupancy_grid_node -resolution 0.05
 
 # 终端4: 启动电机控制节点
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-~/raspi_car_ws/src/raspi_car/scripts/start_motor_controller.sh
+~/ROS2-boxcar/src/raspi_car/scripts/start_motor_controller.sh
 
 # 终端5: 启动键盘控制
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-cd ~/raspi_car_ws/src/raspi_car/scripts
+cd ~/ROS2-boxcar/src/raspi_car/scripts
 python3 keyboard_controller_node.py
 
 # 终端6: 启动远程RViz (在设置好X11环境后)
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
-DISPLAY=YOUR_WINDOWS_IP:0.0 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 ros2 run rviz2 rviz2 -d ~/raspi_car_ws/install/raspi_car/share/raspi_car/config/cartographer.rviz
+DISPLAY=YOUR_WINDOWS_IP:0.0 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3 ros2 run rviz2 rviz2 -d ~/ROS2-boxcar/install/raspi_car/share/raspi_car/config/cartographer.rviz
 ```
 
 ## 仅测试雷达显示
@@ -140,7 +165,7 @@ DISPLAY=YOUR_WINDOWS_IP:0.0 LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_VERSION_OVERRIDE=3.3
 如果想要单独测试雷达数据是否能在RViz中正确显示，可以使用专门的测试启动文件：
 
 ```bash
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 launch raspi_car test_lidar_viz.launch.py serial_port:=/dev/rplidar windows_ip:=192.168.0.4
 ```
@@ -156,11 +181,11 @@ ros2 launch raspi_car test_lidar_viz.launch.py serial_port:=/dev/rplidar windows
 
 ```bash
 # 保存为Cartographer原始格式
-cd ~/raspi_car_ws
+cd ~/ROS2-boxcar
 source install/setup.bash
 ros2 run cartographer_ros cartographer_pbstream_to_ros_map \
-  -pbstream_filename=/home/ocean/raspi_car_ws/src/raspi_car/maps/map.pbstream \
-  -map_filestem=/home/ocean/raspi_car_ws/src/raspi_car/maps/map
+  -pbstream_filename=/home/ocean/ROS2-boxcar/src/raspi_car/maps/map.pbstream \
+  -map_filestem=/home/ocean/ROS2-boxcar/src/raspi_car/maps/map
 ```
 
 ## 键盘控制说明
@@ -208,7 +233,7 @@ TypeError: can only concatenate str (not "LaunchConfiguration") to str
    ros2 launch raspi_car lidar_only.launch.py
    
    # 步骤2: 另一个终端启动RViz
-   ~/raspi_car_ws/src/raspi_car/scripts/start_remote_rviz.sh 192.168.0.4
+   ~/ROS2-boxcar/src/raspi_car/scripts/start_remote_rviz.sh 192.168.0.4
    ```
 
 ### RViz无法显示雷达数据问题
@@ -243,22 +268,23 @@ TypeError: can only concatenate str (not "LaunchConfiguration") to str
 
    **解决方法**：使用增强版的启动脚本：
    ```bash
-   ~/raspi_car_ws/src/raspi_car/scripts/start_remote_rviz.sh YOUR_WINDOWS_IP
+   ~/ROS2-boxcar/src/raspi_car/scripts/start_remote_rviz.sh YOUR_WINDOWS_IP
    ```
    此脚本会进行连接测试并提供详细的调试信息。
 
-### 其他常见问题
+### Cartographer特定问题
 
-1. **RViz无法显示**: 
-   - 确保Windows上的XLaunch运行时勾选了"Disable access control"
-   - 检查Windows防火墙是否阻止了TCP端口6000
-   - 使用`~/raspi_car_ws/src/raspi_car/scripts/setup_x11_display.sh YOUR_WINDOWS_IP`测试X11连接
+1. **坐标系跳动问题**:
+   使用Cartographer时，地图可能会因为激光雷达坐标系与IMU不一致而出现跳动。
+   
+   **解决方法**：使用我们优化的cartographer_slam.launch.py文件，它添加了稳定的激光雷达坐标系和改进的IMU融合。
+   
+2. **初始化顺序问题**:
+   Cartographer需要正确的节点启动顺序才能建立稳定的TF树和地图。
+   
+   **解决方法**：cartographer_slam.launch.py文件使用了TimerAction确保组件按照正确的顺序和时间启动。
 
-2. **电机控制节点无法启动**:
-   - 检查GPIO权限: `sudo chmod 666 /dev/gpiomem`
-   - 检查是否已安装GPIO库: `sudo apt install python3-gpiozero python3-rpi.gpio`
-
-3. **激光雷达无法连接**:
-   - 检查串口设备是否存在: `ls -l /dev/rplidar`
-   - 设置串口权限: `sudo chmod 666 /dev/rplidar`
-   - 如果设备名称不同，请相应修改参数 
+3. **配置文件优化**:
+   可能需要根据特定环境调整Cartographer参数。
+   
+   **解决方法**：已经对raspi_car_cartographer.lua进行了优化，提高了小车在不同环境下的建图稳定性。 
